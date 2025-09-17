@@ -3,10 +3,12 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 import datetime
 import pathlib
 import os
+from sqlitemodel import SQL
 
 #local
 from QtUi import Ui_MainWindow
 import storetime
+from models import *
 
 class InflatedStopwatchInterface(Ui_MainWindow):
     INTERVAL = 1000
@@ -14,11 +16,22 @@ class InflatedStopwatchInterface(Ui_MainWindow):
     DATE_FORMAT = "%Y-%m-%d"
     def setupUi(self, MainWindow):
         super().setupUi(MainWindow)
-        self.today = datetime.datetime.today()
+        today = datetime.datetime.today()
+        self.today = datetime.datetime(
+            year=today.year,
+            month=today.month,
+            day=today.day,
+            hour=0, minute=0, second=0
+        )
         self.seconder = QtCore.QTimer()
         self.counter = storetime.Time()
+        self.record = Record()
 
         self.display()
+    #end def
+        
+    def setupDb(self):
+        Record().createTable()
     #end def
 
     # -- Behaviors
@@ -27,13 +40,24 @@ class InflatedStopwatchInterface(Ui_MainWindow):
     #end def
 
     def log(self):
-        with open(self.LOG_PATH, "a") as log_file:
-            log_file.write("%s, %s\n" 
-                %(self.today.strftime(self.DATE_FORMAT),
-                str(self.counter)
-            ))
-        #end with
+        self.record.unix_date = SqLiteConvertions.dateToUnix(self.today)
+        self.record.seconds_worked = self.counter.totalSeconds()
+        self.record.save()
     #end def
+        
+    def loadCounterFromLog(self, date: datetime.date=None):
+        if date is None:
+            date = self.today
+        #end if
+        record = Record().selectOne(SQL().WHERE('unix_date', '=', SqLiteConvertions.dateToUnix(date)))
+
+        if record is None:
+            return 
+        #end if
+        self.record = record
+        self.counter = Time.from_seconds(record.seconds_worked)
+    #end def
+
 
     # -- Events
     def addSecond(self):
@@ -59,6 +83,14 @@ class InflatedStopwatchInterface(Ui_MainWindow):
         self.display()
     #end def
 
+    def clickPlusOne(self):
+        self.counter.addMinute()
+        self.display()
+    def clickPlusTen(self):
+        self.counter.addMinutes(10)
+        self.display()
+    #end def
+    
     def clickClose(self):
         self.clickStop()
     #end def
